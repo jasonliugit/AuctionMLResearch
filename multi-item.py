@@ -120,26 +120,44 @@ v2 = 60
 q1 = 1
 q2 = 0.5
 num_bidders = 3  # Please put a number greater than or equal to 3
-num_rounds = 1000
-winning_bids1, winning_bids2 = run_simulation(v1, v2, q1, q2, num_bidders, num_rounds)
+num_rounds = 2000
+num_tests = 500
+
+def run_experiments():
+    winning_bids1_results = [0] * num_rounds
+    winning_bids2_results = [0] * num_rounds
+    for i in range(num_tests):
+        winning_bids1, winning_bids2 = run_simulation(v1, v2, q1, q2, num_bidders, num_rounds)
+        for j in range(num_rounds):
+            winning_bids1_results[j] += winning_bids1[j]
+            winning_bids2_results[j] += winning_bids2[j]
+    for i in range(num_rounds):
+        winning_bids1_results[i] /= num_tests
+        winning_bids2_results[i] /= num_tests
+        
+    return winning_bids1_results, winning_bids2_results
+
+winning_bids1_results, winning_bids2_results = run_experiments()
 
 rounds = np.arange(num_rounds)
 plt.figure(figsize=(10, 10))
 
 # Plotting the bids for each bidder
 plt.subplot(2, 1, 1)
-plt.scatter(rounds, winning_bids1, label='Item 1 Bids', color="blue", s=5)
+plt.scatter(rounds, winning_bids1_results, label='Item 1 Bids', color="blue", s=1)
 plt.xlabel('Round Number')
 plt.ylabel('Amount Bid')
 plt.title('Bids Over Rounds - Winning Bids for Item 1')
 plt.grid(True)
-
+print(winning_bids1_results[-3:]) # print out the last 3 values
+    
 plt.subplot(2, 1, 2)
-plt.scatter(rounds, winning_bids2, label='Item 2 Bids', color="green", s=5)
+plt.scatter(rounds, winning_bids2_results, label='Item 2 Bids', color="green", s=1)
 plt.xlabel('Round Number')
 plt.ylabel('Amount Bid')
 plt.title('Bids Over Rounds - Winning Bids for Item 2')
 plt.grid(True)
+print(winning_bids2_results[-3:]) # print out the last 3 values
 
 plt.tight_layout()
 plt.show()

@@ -25,8 +25,8 @@ class AuctionEnvironment:
         else:
             raise ValueError("Invalid auction type specified.")
 
-        # Return the winner, payment, and bids
-        return winner, payment, bids
+        # Return the winner, winning_bid, payment, and bids
+        return winner, winning_bid, payment, bids
 
 
 class RLBidder:
@@ -60,16 +60,22 @@ class RLBidder:
         self.epsilon = max(0.01, self.epsilon * self.epsilon_decay)
 
 
-def calculate_reward(winner, payment, valuation, my_bid, opponent_bid):
-    if winner:
+def calculate_reward(is_winner, payment, valuation, my_bid, opponent_bids):
+    if is_winner:
         # Reward is the difference between the valuation and the payment
         reward = valuation - payment
     else:
         # No reward for losing (could also consider a small negative reward)
         reward = 0
         
-    # If opponent_bid is provided (open auction)
-    if opponent_bid is not None:
+    # If opponent_bids is provided (open auction)
+    if opponent_bids is not None:
+        #if i am winer, use the 2nd price as the opponent_bid
+        if is_winner:
+            opponent_bid = sorted(opponent_bids)[-2]  # The second-highest bid
+        else:
+            opponent_bid = max(opponent_bids) # use the winner bid
+        
         if my_bid > opponent_bid:
             reward += 0.1 * (valuation - my_bid)  # Slight positive adjustment for winning by a small margin
         else:
@@ -78,13 +84,14 @@ def calculate_reward(winner, payment, valuation, my_bid, opponent_bid):
     return reward
 
 
-def run_simulation(valuation1=100, valuation2=100, auction_type="first-price", visibility="closed", num_rounds=1000):
-    env = AuctionEnvironment(max(valuation1, valuation2), auction_type=auction_type)
-    bidders = [RLBidder(valuation1), RLBidder(valuation2)]
+def run_simulation(valuation1=100, valuation2=100, valuation3=100, auction_type="first-price", visibility="closed", num_rounds=1000):
+    env = AuctionEnvironment(max(valuation1, valuation2, valuation3), auction_type=auction_type)
+    bidders = [RLBidder(valuation1), RLBidder(valuation2), RLBidder(valuation3)]
 
     # Lists to store bids for plotting
     bids_bidder_1 = []
     bids_bidder_2 = []
+    bids_bidder_3 = []
     winning_bids = []
 
     for round in range(num_rounds):
@@ -92,21 +99,23 @@ def run_simulation(valuation1=100, valuation2=100, auction_type="first-price", v
         bids = [bidder.select_bid() for bidder in bidders]
 
         # Run the auction and get the results
-        winner, payment, bids = env.run_auction(bids)
+        winner, winner_bid, payment, bids = env.run_auction(bids)
 
         # Store the bids for this round
         bids_bidder_1.append(bids[0])
         bids_bidder_2.append(bids[1])
-        winning_bids.append(max(bids))
+        bids_bidder_3.append(bids[2])
+        winning_bids.append(winner_bid)
 
         # Calculate rewards and update the bidders
         for i, bidder in enumerate(bidders):
+            opponent_bids = bids if visibility == "open" else None
             if i == 0:
-                opponent_bid = bids[1] if visibility == "open" else None
-                reward = calculate_reward(i == winner, payment, valuation1, bids[i],opponent_bid)
+                reward = calculate_reward(i == winner, payment, valuation1, bids[i],opponent_bids)
+            elif i == 1:
+                reward = calculate_reward(i == winner, payment, valuation2, bids[i],opponent_bids)
             else:
-                opponent_bid = bids[0] if visibility == "open" else None
-                reward = calculate_reward(i == winner, payment, valuation2, bids[i],opponent_bid)
+                reward = calculate_reward(i == winner, payment, valuation3, bids[i],opponent_bids)
                     
             bidder.update_q_table(bids[i], reward)
             bidder.update_epsilon()
@@ -115,23 +124,20 @@ def run_simulation(valuation1=100, valuation2=100, auction_type="first-price", v
         # if round % 1000 == 0:
         #     print(f"Round {round}: Bids - {bids}, Winner - Bidder {winner}, Payment - {payment}")
 
-    return bids_bidder_1, bids_bidder_2, winning_bids
+    return winning_bids, bids_bidder_1, bids_bidder_2, bids_bidder_3 
 
 
 # Run the simulation with the desired auction parameters
 valuation1 = 100
 valuation2 = 100
-num_rounds = 7500
-num_tests = 1000
+valuation3 = 100
+num_rounds = 5000
+num_tests = 100
     
-figure_index = 1
-
 def run_experiments(auction_type, visibility):
-    global figure_index
-    
     results = [0] * num_rounds
     for i in range(num_tests):
-        bids_bidder_1, bids_bidder_2, winning_bids = run_simulation(valuation1, valuation2, auction_type, visibility, num_rounds)
+        winning_bids, _, _, _ = run_simulation(valuation1, valuation2, valuation3, auction_type, visibility, num_rounds)
         for j in range(num_rounds):
             results[j] += winning_bids[j]
     for i in range(num_rounds):
@@ -142,31 +148,24 @@ def run_experiments(auction_type, visibility):
     # bids_bidder_1, bids_bidder_2
     rounds = np.arange(num_rounds)
 
-    colors = ['blue', 'red', 'yellow', 'green']
-    plt.figure(figure_index)
-    
-    plt.scatter(rounds, results, label='Winning Bids', color=colors[1], s=1)
+    plt.scatter(rounds, results, label='Winning Bids', color='blue', s=1)
     plt.xlabel('Round Number')
     plt.ylabel('Amount Bid')
-    plt.title('Winning Bids: ' + auction_type)
+    plt.title('Winning Bids: ' + auction_type + " " + visibility)
     plt.grid(True)
-
     print(results[-3:]) # print out the last 3 values
-    figure_index += 1
 
-run_experiments("first-price", "closed")
+plt.subplot(4, 1, 1)
+run_experiments("first-price", "Closed")
 
-#plt.subplot(4, 1, 2)
-#plt.figure(2)
-#run_experiments("first-price", "open")
+plt.subplot(4, 1, 2)
+run_experiments("first-price", "open")
 
-#plt.subplot(4, 1, 3)
-#plt.figure(2)
+plt.subplot(4, 1, 3)
 run_experiments("second-price", "closed")
 
-#plt.subplot(4, 1, 4)
-#plt.figure(4)
-#run_experiments("second-price", "open")
+plt.subplot(4, 1, 4)
+run_experiments("second-price", "open")
 plt.show()
 
 # # Subplot for Bidder 1
